@@ -197,38 +197,57 @@ function draw(){
 }
 
 async function startMic(){
+
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    // create context AFTER user interaction
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    if(audioCtx.state === 'suspended'){
+      await audioCtx.resume();
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
     overlay.style.display='none';
 
-    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-    analyser=audioCtx.createAnalyser();
-    analyser.fftSize=2048;
-    source=audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+
+    source = audioCtx.createMediaStreamSource(stream);
     source.connect(analyser);
 
-    const buf=new Float32Array(analyser.fftSize);
-    volumes=new Array(maxSamples).fill(0.02);
-    displayVolumes=new Array(maxSamples).fill(0.02);
+    const buf = new Float32Array(analyser.fftSize);
 
-    startTime=Date.now();
-    titleEl.textContent='Ora inizia a cantare!';
+    volumes = new Array(maxSamples).fill(0.02);
+    displayVolumes = new Array(maxSamples).fill(0.02);
 
-    samplerId=setInterval(()=>{
+    startTime = Date.now();
+    titleEl.textContent = 'Ora inizia a cantare!';
+
+    if(samplerId) clearInterval(samplerId);
+
+    samplerId = setInterval(()=>{
       analyser.getFloatTimeDomainData(buf);
+
       let sum=0;
-      for(let i=0;i<buf.length;i++) sum+=buf[i]*buf[i];
-      const rms=Math.sqrt(sum/buf.length);
-      const level=Math.pow(rms,0.6);
+      for(let i=0;i<buf.length;i++) sum += buf[i]*buf[i];
+
+      const rms = Math.sqrt(sum/buf.length);
+      const level = Math.pow(rms,0.6);
+
       volumes.push(level);
       if(volumes.length>maxSamples) volumes.shift();
-    },sampleInterval);
+
+    }, sampleInterval);
 
     draw();
+
   }catch(e){
     overlay.style.display='flex';
   }
 }
+
 
 retryBtn.addEventListener('click',startMic);
 window.addEventListener('load',()=>setTimeout(startMic,150));
