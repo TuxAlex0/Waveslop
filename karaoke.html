@@ -6,16 +6,17 @@
   <title>Minimal Waveform (Mic)</title>
   <style>
     :root{
-      --bg:#0f1720; /* dark minimal */
-      --fg:#e6eef8;
-      --muted:#9aa7b8;
-      --accent:#ef4444; /* red */
+      --bg:#0b1220;
+      --fg:#f1f5f9;
+      --muted:#94a3b8;
+      --accent:#ef4444;
+      --glow1:#22d3ee;
+      --glow2:#a78bfa;
     }
-    html,body{height:100%;}
-    body{
+    html,body{
       margin:0;
       font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      background:var(--bg);
+      background: radial-gradient(circle at 50% 50%, #111827 0%, #0b1220 60%, #070c16 100%);
       color:var(--fg);
       -webkit-font-smoothing:antialiased;
       -moz-osx-font-smoothing:grayscale;
@@ -162,8 +163,8 @@
 
   <div id="overlay" class="overlay" style="display:none;">
     <div class="card">
-      <div id="overlay-msg">Questa pagina richiede l'accesso al microfono.<br/>Se il tuo browser ha bloccato la richiesta automatica, tocca il pulsante qui sotto per abilitare il microfono.</div>
-      <button id="retry" class="btn">Abilita Microfono</button>
+      <div id="overlay-msg">This page needs microphone access to show the waveform.<br/>If your browser blocked the automatic request, tap the button below to enable the microphone.</div>
+      <button id="retry" class="btn">Enable Microphone</button>
     </div>
   </div>
 
@@ -183,6 +184,7 @@
       let rafId = null;
       let sampleInterval = 40; // ms between samples (volume snapshots)
       let volumes = [];
+      let displayVolumes = []; // smoothed values for nicer animation
       let maxSamples = 600; // will be adjusted depending on canvas width
       let startTime = null;
       let samplerId = null;
@@ -217,24 +219,40 @@
 
         const len = volumes.length;
         if(len > 0){
-          const barCount = len;
-          const step = wr / Math.max(barCount,1);
-          const barWidth = Math.max(2, step * 0.5);
+          const step = wr / Math.max(len,1);
+          const barWidth = Math.max(2, step * 0.55);
 
           ctx.lineCap = 'round';
-          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
           ctx.lineWidth = barWidth;
 
-          for(let i=0;i<barCount;i++){
-            const v = Math.min(1, Math.max(0, volumes[i]));
-            const amp = v * (hr * 0.45);
+          // smooth animation
+          for(let i=0;i<len;i++){
+            if(displayVolumes[i] == null) displayVolumes[i] = volumes[i];
+            displayVolumes[i] = displayVolumes[i] * 0.82 + volumes[i] * 0.18;
+          }
+
+          for(let i=0;i<len;i++){
+            const v = Math.min(1, Math.max(0, displayVolumes[i]));
+            const amp = v * (hr * 0.46);
             const x = i * step + step/2;
+
+            const gradient = ctx.createLinearGradient(0, midY-amp, 0, midY+amp);
+            gradient.addColorStop(0, 'rgba(167,139,250,0.9)');
+            gradient.addColorStop(0.5, 'rgba(255,255,255,1)');
+            gradient.addColorStop(1, 'rgba(34,211,238,0.9)');
+
+            ctx.strokeStyle = gradient;
+
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(167,139,250,0.4)';
 
             ctx.beginPath();
             ctx.moveTo(x, midY - amp);
             ctx.lineTo(x, midY + amp);
             ctx.stroke();
           }
+
+          ctx.shadowBlur = 0;
         }
 
         if(startTime) timerEl.textContent = formatTime(Date.now() - startTime);
@@ -273,6 +291,7 @@
 
           // prefill with small idle values so waveform doesn't "grow from zero"
           volumes = Array.from({length: maxSamples}, () => 0.02);
+          displayVolumes = Array.from({length: maxSamples}, () => 0.02);
 
           // update title (mic granted)
           if(titleEl) titleEl.textContent = 'Ora inizia a cantare!';
