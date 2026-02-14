@@ -3,347 +3,272 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Minimal Waveform (Mic)</title>
+  <title>Premium Waveform Visualizer</title>
   <style>
-    :root{
-      --bg:#0b1220;
-      --fg:#f1f5f9;
-      --muted:#94a3b8;
-      --accent:#ef4444;
-      --glow1:#22d3ee;
-      --glow2:#a78bfa;
-    }
-    html,body{
-      margin:0;
-      font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      background: radial-gradient(circle at 50% 50%, #111827 0%, #0b1220 60%, #070c16 100%);
-      color:var(--fg);
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
-      display:flex;
-      align-items:center;
-      justify-content:center;
+    :root {
+      --bg: #030712;
+      --card-bg: rgba(30, 41, 59, 0.5);
+      --accent: #ef4444; /* Emerald */
+      --glow-1: #22d3ee; /* Cyan */
+      --glow-2: #818cf8; /* Indigo */
+      --text: #f8fafc;
+      --muted: #94a3b8;
     }
 
-    .page{
-      width:100%;
-      max-width:900px;
-      padding:20px;
-      box-sizing:border-box;
-      display:flex;
-      flex-direction:column;
-      gap:20px;
-      align-items:center;
-      justify-content:center;
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at center, #111827 0%, #030712 100%);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
     }
 
-    .recorder{
-      width:100%;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-      align-items:center;
+    .container {
+      width: 90%;
+      max-width: 800px;
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      text-align: center;
     }
 
-    .canvas-wrap{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      width:100%;
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 500;
+      letter-spacing: -0.025em;
+      margin-bottom: 2rem;
+      color: var(--muted);
     }
 
-    canvas#wave{
-      width:100%;
-      height:200px;
-      max-height:42vh;
-      border-radius:12px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00));
-      box-shadow: 0 6px 18px rgba(2,6,23,0.6);
-      touch-action:none;
-      display:block;
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 240px;
+      margin-bottom: 2rem;
     }
 
-    .status-row{
-      width:100%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:10px;
-      font-size:14px;
-      color:var(--muted);
+    canvas#wave {
+      width: 100%;
+      height: 100%;
+      /* This CSS filter creates a much cleaner glow than JS shadowBlur */
+      filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.3));
     }
 
-    .recording {
-      display:flex;
-      align-items:center;
-      gap:8px;
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 12px 24px;
+      border-radius: 100px;
+      width: fit-content;
+      margin: 0 auto;
     }
 
-    .dot{
-      width:12px;
-      height:12px;
-      border-radius:50%;
-      background:var(--accent);
-      box-shadow:0 0 10px rgba(239,68,68,0.6);
-      animation: pulse 1s infinite ease-in-out;
-    }
-    @keyframes pulse{
-      0%{transform:scale(1); opacity:1}
-      50%{transform:scale(1.4); opacity:0.6}
-      100%{transform:scale(1); opacity:1}
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent);
+      animation: pulse 2s infinite;
     }
 
-    .timer{
-      font-variant-numeric: tabular-nums;
-      font-weight:600;
-      color:var(--fg);
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.5); opacity: 0.5; }
     }
 
-    .hint{
-      font-size:12px;
-      color:var(--muted);
-      text-align:center;
+    .timer {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
     }
 
-    .overlay{
-      position:fixed;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:linear-gradient(180deg, rgba(2,6,23,0.6), rgba(2,6,23,0.85));
-      z-index:30;
-      padding:20px;
-      box-sizing:border-box;
-    }
-    .overlay .card{
-      background:var(--bg);
-      border-radius:12px;
-      padding:18px;
-      text-align:center;
-      max-width:520px;
-      color:var(--fg);
-      box-shadow:0 10px 30px rgba(2,6,23,0.6);
-    }
-    .btn{
-      margin-top:12px;
-      padding:8px 14px;
-      border-radius:8px;
-      border:0;
-      cursor:pointer;
-      background:var(--fg);
-      color:var(--bg);
-      font-weight:600;
+    /* Permission Overlay */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(8px);
     }
 
-    /* small screens adjustments */
-    @media (max-width:420px){
-      canvas#wave{height:150px}
+    .card {
+      background: #1e293b;
+      padding: 32px;
+      border-radius: 20px;
+      max-width: 400px;
+      border: 1px solid rgba(255,255,255,0.1);
     }
+
+    .btn {
+      background: var(--text);
+      color: var(--bg);
+      border: none;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      margin-top: 20px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .btn:hover { transform: translateY(-2px); }
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="recorder" role="application" aria-label="Live waveform">
-      <div id="title" style="font-weight:600; text-align:center; margin-bottom:6px;">Autorizza il microfono per cantare!</div>
-      <div class="canvas-wrap">
-        <canvas id="wave"></canvas>
-      </div>
 
-      <div class="status-row">
-        <div class="recording">
-          <div class="dot" aria-hidden="true"></div>
-          <div class="timer" id="timer">00:00</div>
-        </div>
-      </div>
+  <div class="container">
+    <h1 id="title">Autorizza il microfono per cantare</h1>
+    
+    <div class="canvas-container">
+      <canvas id="wave"></canvas>
+    </div>
 
-      
+    <div class="status-bar">
+      <div class="dot"></div>
+      <div class="timer" id="timer">00:00</div>
     </div>
   </div>
 
   <div id="overlay" class="overlay" style="display:none;">
     <div class="card">
-      <div id="overlay-msg">This page needs microphone access to show the waveform.<br/>If your browser blocked the automatic request, tap the button below to enable the microphone.</div>
-      <button id="retry" class="btn">Enable Microphone</button>
+      <p id="overlay-msg">Accesso al microfono richiesto.</p>
+      <button id="retry" class="btn">Attiva Microfono</button>
     </div>
   </div>
 
   <script>
-    // Minimal waveform visualizer with immediate mic request on load.
     (function(){
       const canvas = document.getElementById('wave');
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: true });
       const timerEl = document.getElementById('timer');
       const titleEl = document.getElementById('title');
       const overlay = document.getElementById('overlay');
       const retryBtn = document.getElementById('retry');
 
-      let audioCtx = null;
-      let analyser = null;
-      let source = null;
-      let rafId = null;
-      let sampleInterval = 40; // ms between samples (volume snapshots)
+      let audioCtx, analyser, source, rafId, samplerId;
       let volumes = [];
-      let displayVolumes = []; // smoothed values for nicer animation
-      let maxSamples = 600; // will be adjusted depending on canvas width
+      let displayVolumes = [];
       let startTime = null;
-      let samplerId = null;
+      const maxSamples = 80; // Reduced for a "cleaner" bar look
+      const sampleInterval = 30;
 
-      // DPR-aware canvas resize
-      function resizeCanvas(){
-        const dpr = Math.max(1, window.devicePixelRatio || 1);
+      function resize() {
+        const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
-        canvas.width = Math.floor(rect.width * dpr);
-        canvas.height = Math.floor(rect.height * dpr);
-        ctx.setTransform(dpr,0,0,dpr,0,0);
-        maxSamples = Math.max(64, Math.round(rect.width / 2));
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
       }
+      window.addEventListener('resize', resize);
+      resize();
 
-      window.addEventListener('resize', ()=>{
-        resizeCanvas();
-      });
+      function draw() {
+        const w = canvas.width / (window.devicePixelRatio || 1);
+        const h = canvas.height / (window.devicePixelRatio || 1);
+        ctx.clearRect(0, 0, w, h);
 
-      function formatTime(ms){
-        const s = Math.floor(ms/1000);
-        const mm = Math.floor(s/60).toString().padStart(2,'0');
-        const ss = (s%60).toString().padStart(2,'0');
-        return `${mm}:${ss}`;
-      }
+        const centerY = h / 2;
+        const barGap = 6; 
+        const barWidth = (w / maxSamples) - barGap;
+        const radius = barWidth / 2;
 
-      function draw(){
-        const wr = canvas.width / (window.devicePixelRatio || 1);
-        const hr = canvas.height / (window.devicePixelRatio || 1);
-        ctx.clearRect(0,0,wr,hr);
-
-        const midY = hr/2;
-
-        const len = volumes.length;
-        if(len > 0){
-          const step = wr / Math.max(len,1);
-          const barWidth = Math.max(2, step * 0.55);
-
-          ctx.lineCap = 'round';
-          ctx.lineWidth = barWidth;
-
-          // smooth animation
-          for(let i=0;i<len;i++){
-            if(displayVolumes[i] == null) displayVolumes[i] = volumes[i];
-            displayVolumes[i] = displayVolumes[i] * 0.82 + volumes[i] * 0.18;
-          }
-
-          for(let i=0;i<len;i++){
-            const v = Math.min(1, Math.max(0, displayVolumes[i]));
-            const amp = v * (hr * 0.46);
-            const x = i * step + step/2;
-
-            const gradient = ctx.createLinearGradient(0, midY-amp, 0, midY+amp);
-            gradient.addColorStop(0, 'rgba(167,139,250,0.9)');
-            gradient.addColorStop(0.5, 'rgba(255,255,255,1)');
-            gradient.addColorStop(1, 'rgba(34,211,238,0.9)');
-
-            ctx.strokeStyle = gradient;
-
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = 'rgba(167,139,250,0.4)';
-
-            ctx.beginPath();
-            ctx.moveTo(x, midY - amp);
-            ctx.lineTo(x, midY + amp);
-            ctx.stroke();
-          }
-
-          ctx.shadowBlur = 0;
+        // Visual smoothing logic
+        for(let i = 0; i < volumes.length; i++) {
+          if(displayVolumes[i] == null) displayVolumes[i] = 0;
+          // Faster spring-back for a snappy feel
+          displayVolumes[i] += (volumes[i] - displayVolumes[i]) * 0.15;
         }
 
-        if(startTime) timerEl.textContent = formatTime(Date.now() - startTime);
+        displayVolumes.forEach((vol, i) => {
+          // Add a tiny bit of random "life" noise
+          const noise = Math.random() * 2;
+          const minHeight = 4;
+          const magnitude = (vol * (h * 0.8)) + minHeight + noise;
+          
+          const x = i * (barWidth + barGap);
+          const y = centerY - magnitude / 2;
+
+          // Gradient creation
+          const grad = ctx.createLinearGradient(0, y, 0, y + magnitude);
+          grad.addColorStop(0, '#22d3ee'); // Cyan
+          grad.addColorStop(0.5, '#818cf8'); // Indigo
+          grad.addColorStop(1, '#22d3ee');
+
+          ctx.fillStyle = grad;
+          
+          // Draw rounded bars (Capsule style)
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(x, y, barWidth, magnitude, [radius]);
+          } else {
+            ctx.rect(x, y, barWidth, magnitude); // Fallback
+          }
+          ctx.fill();
+        });
+
+        if(startTime) {
+          const diff = Date.now() - startTime;
+          const s = Math.floor(diff/1000);
+          timerEl.textContent = `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+        }
+
         rafId = requestAnimationFrame(draw);
       }
 
-      function computeRMS(floatData){
-        let sum=0;
-        for(let i=0;i<floatData.length;i++){
-          const v = floatData[i];
-          sum += v*v;
-        }
-        return Math.sqrt(sum/floatData.length);
-      }
-
-      async function startMic(){
-        overlay.style.display = 'none';
-        try{
-          // request mic
-          const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-          // create or resume audio context
-          if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          if(audioCtx.state === 'suspended') await audioCtx.resume();
-
-          source = audioCtx.createMediaStreamSource(stream);
+      async function init() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          overlay.style.display = 'none';
+          
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 2048;
-          analyser.smoothingTimeConstant = 0.8; // smooth values a bit
+          analyser.fftSize = 512; 
+          source = audioCtx.createMediaStreamSource(stream);
           source.connect(analyser);
 
-          // allocate array
-          const buf = new Float32Array(analyser.fftSize);
-
-          // ensure canvas sized
-          resizeCanvas();
-
-          // prefill with small idle values so waveform doesn't "grow from zero"
-          volumes = Array.from({length: maxSamples}, () => 0.02);
-          displayVolumes = Array.from({length: maxSamples}, () => 0.02);
-
-          // update title (mic granted)
-          if(titleEl) titleEl.textContent = 'Ora inizia a cantare!';
-
-          // start timer
+          const dataArray = new Float32Array(analyser.frequencyBinCount);
+          volumes = new Array(maxSamples).fill(0);
+          displayVolumes = new Array(maxSamples).fill(0);
+          
           startTime = Date.now();
+          titleEl.textContent = "Ora inizia a cantare!";
 
-          // start sampling at fixed interval
-          if(samplerId) clearInterval(samplerId);
-          samplerId = setInterval(()=>{
-            analyser.getFloatTimeDomainData(buf);
-            const rms = computeRMS(buf); // ~0..1
-            // compress a bit to make quiet sounds visible
-            const compressed = Math.pow(rms, 0.6);
-            volumes.push(compressed);
+          samplerId = setInterval(() => {
+            analyser.getFloatTimeDomainData(dataArray);
+            let sum = 0;
+            for(let i=0; i<dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+            let rms = Math.sqrt(sum / dataArray.length);
+            // Boost sensitivity
+            let level = Math.pow(rms, 0.7) * 1.5; 
+            volumes.push(level);
             if(volumes.length > maxSamples) volumes.shift();
           }, sampleInterval);
 
-          // start drawing
-          if(!rafId) draw();
-
-        }catch(err){
-          console.warn('Microphone request failed:', err);
-          // show overlay with retry button on certain errors
+          draw();
+        } catch (e) {
           overlay.style.display = 'flex';
-          document.getElementById('overlay-msg').innerHTML = '<strong>Microphone access blocked</strong><br/>Please allow microphone access in your browser or tap the button to retry.';
         }
       }
 
-      // try to request on load as requested
-      window.addEventListener('load', ()=>{
-        // small delay so UI painted before permission prompt on some mobile browsers
-        setTimeout(()=>{
-          // Try to start mic immediately.
-          startMic();
-        }, 150);
-      });
-
-      retryBtn.addEventListener('click', ()=>{
-        startMic();
-      });
-
-      // init sizing when DOM ready
-      resizeCanvas();
-
-      // cleanup on unload
-      window.addEventListener('beforeunload', ()=>{
-        if(rafId) cancelAnimationFrame(rafId);
-        if(samplerId) clearInterval(samplerId);
-        if(audioCtx && audioCtx.close) audioCtx.close();
-      });
-
+      retryBtn.addEventListener('click', init);
+      window.addEventListener('load', () => setTimeout(init, 500));
     })();
   </script>
 </body>
