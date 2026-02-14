@@ -141,12 +141,32 @@ canvas{
 <script>
 (function(){
 
-const canvas=document.getElementById('wave');
-const ctx=canvas.getContext('2d');
-const timerEl=document.getElementById('timer');
-const overlay=document.getElementById('overlay');
-const retryBtn=document.getElementById('retry');
-const titleEl=document.getElementById('title');
+const canvas = document.getElementById('wave');
+const ctx = canvas.getContext('2d');
+
+// Polyfill for Android / older Chrome builds
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    if (typeof r === 'number') r = [r, r, r, r];
+    this.beginPath();
+    this.moveTo(x + r[0], y);
+    this.lineTo(x + w - r[1], y);
+    this.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+    this.lineTo(x + w, y + h - r[2]);
+    this.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+    this.lineTo(x + r[3], y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+    this.lineTo(x, y + r[0]);
+    this.quadraticCurveTo(x, y, x + r[0], y);
+    this.closePath();
+  };
+}
+
+const timerEl = document.getElementById('timer');
+const overlay = document.getElementById('overlay');
+const retryBtn = document.getElementById('retry');
+const titleEl = document.getElementById('title');
+
 
 let audioCtx, analyser, source, rafId, samplerId;
 let volumes=[], displayVolumes=[];
@@ -204,20 +224,22 @@ function draw(){
 }
 
 async function startMic(){
-  
+
   try{
-    // request mic
-    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    
-    // create or resume audio context
-    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if(audioCtx.state === 'suspended') await audioCtx.resume();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // Create audio context AFTER stream
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
 
     source = audioCtx.createMediaStreamSource(stream);
     source.connect(analyser);
+
+    if(audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
 
     const buf = new Float32Array(analyser.fftSize);
 
@@ -250,6 +272,7 @@ async function startMic(){
     overlay.style.display='flex';
   }
 }
+
 
 // Request microphone immediately on load
 retryBtn.addEventListener('click',startMic);
