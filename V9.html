@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Premium Waveform (Mic)</title>
+
+<style>
+:root {
+  --bg:#030712;
+  --card-bg:rgba(30,41,59,0.5);
+  --accent:#ef4444;
+  --glow1:#22d3ee;
+  --glow2:#818cf8;
+  --text:#f8fafc;
+  --muted:#94a3b8;
+}
+
+body{
+  margin:0;
+  font-family:Inter,system-ui,-apple-system,sans-serif;
+  background: radial-gradient(circle at center,#111827 0%,#030712 100%);
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--text);
+}
+
+.container{
+  width:90%;
+  max-width:800px;
+  background:var(--card-bg);
+  backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:24px;
+  padding:40px;
+  text-align:center;
+}
+
+h1{
+  font-size:1.2rem;
+  margin-bottom:2rem;
+  color:var(--muted);
+}
+
+.canvas-container{
+  width:100%;
+  height:240px;
+  margin-bottom:2rem;
+}
+
+canvas{
+  width:100%;
+  height:100%;
+  filter:drop-shadow(0 0 12px rgba(34,211,238,0.3));
+}
+
+.status-bar{
+  display:flex;
+  justify-content:center;
+  gap:14px;
+  background:rgba(0,0,0,0.25);
+  padding:12px 22px;
+  border-radius:999px;
+  width:fit-content;
+  margin:0 auto;
+}
+
+.dot{
+  width:8px;height:8px;
+  border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 12px var(--accent);
+  animation:pulse 2s infinite;
+}
+
+@keyframes pulse{
+  0%,100%{transform:scale(1);opacity:1}
+  50%{transform:scale(1.5);opacity:0.5}
+}
+
+.timer{
+  font-family:monospace;
+  font-weight:600;
+}
+
+.overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(3,7,18,0.9);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.card{
+  background:#1e293b;
+  padding:30px;
+  border-radius:20px;
+  text-align:center;
+}
+
+.btn{
+  padding:12px 24px;
+  border:none;
+  border-radius:12px;
+  margin-top:20px;
+  font-weight:600;
+  cursor:pointer;
+  background:var(--glow1);
+  color:#030712;
+}
+
+.btn:hover{
+  background:var(--glow2);
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h1 id="title">Autorizza il microfono per cantare</h1>
+  <div class="canvas-container">
+    <canvas id="wave"></canvas>
+  </div>
+  <div class="status-bar">
+    <div class="dot"></div>
+    <div id="timer" class="timer">00:00</div>
+  </div>
+</div>
+
+<div id="overlay" class="overlay" style="display:none;">
+  <div class="card">
+    <div id="overlay-msg">Autorizzazione microfono negata</div>
+    <button id="retry" class="btn">Riprova</button>
+  </div>
+</div>
+
+<script>
+(function(){
+
+const canvas=document.getElementById('wave');
+const ctx=canvas.getContext('2d');
+const timerEl=document.getElementById('timer');
+const overlay=document.getElementById('overlay');
+const retryBtn=document.getElementById('retry');
+const titleEl=document.getElementById('title');
+
+let audioCtx, analyser, source, rafId, samplerId;
+let volumes=[], displayVolumes=[];
+let startTime=null;
+let maxSamples=80;
+const sampleInterval=40;
+
+function resize(){
+  const dpr=window.devicePixelRatio||1;
+  const rect=canvas.getBoundingClientRect();
+  canvas.width=rect.width*dpr;
+  canvas.height=rect.height*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resize);
+resize();
+
+function draw(){
+  const w=canvas.width/(window.devicePixelRatio||1);
+  const h=canvas.height/(window.devicePixelRatio||1);
+  ctx.clearRect(0,0,w,h);
+
+  const gap=6;
+  const barWidth=(w/maxSamples)-gap;
+  const center=h/2;
+  const radius=barWidth/2;
+
+  for(let i=0;i<volumes.length;i++){
+    if(displayVolumes[i]==null) displayVolumes[i]=volumes[i];
+    displayVolumes[i]=displayVolumes[i]*0.82+volumes[i]*0.18;
+  }
+
+  displayVolumes.forEach((v,i)=>{
+    const magnitude=v*(h*0.8)+4;
+    const x=i*(barWidth+gap);
+    const y=center-magnitude/2;
+
+    const grad=ctx.createLinearGradient(0,y,0,y+magnitude);
+    grad.addColorStop(0,'#22d3ee');
+    grad.addColorStop(0.5,'#818cf8');
+    grad.addColorStop(1,'#22d3ee');
+
+    ctx.fillStyle=grad;
+    ctx.beginPath();
+    ctx.roundRect(x,y,barWidth,magnitude,[radius]);
+    ctx.fill();
+  });
+
+  if(startTime){
+    const s=Math.floor((Date.now()-startTime)/1000);
+    timerEl.textContent=`${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+  }
+
+  rafId=requestAnimationFrame(draw);
+}
+
+async function startMic(){
+  
+  try{
+    // request mic
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    
+    // create or resume audio context
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') await audioCtx.resume();
+
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+
+    source = audioCtx.createMediaStreamSource(stream);
+    source.connect(analyser);
+
+    const buf = new Float32Array(analyser.fftSize);
+
+    volumes = new Array(maxSamples).fill(0.02);
+    displayVolumes = new Array(maxSamples).fill(0.02);
+
+    startTime = Date.now();
+    titleEl.textContent = 'Ora inizia a cantare!';
+
+    if(samplerId) clearInterval(samplerId);
+
+    samplerId = setInterval(()=>{
+      analyser.getFloatTimeDomainData(buf);
+
+      let sum=0;
+      for(let i=0;i<buf.length;i++) sum += buf[i]*buf[i];
+
+      const rms = Math.sqrt(sum/buf.length);
+      const level = Math.pow(rms,0.6);
+
+      volumes.push(level);
+      if(volumes.length>maxSamples) volumes.shift();
+
+    }, sampleInterval);
+
+    draw();
+
+  }catch(e){
+    console.error('Microphone error:', e);
+    overlay.style.display='flex';
+  }
+}
+
+// Request microphone immediately on load
+retryBtn.addEventListener('click',startMic);
+window.addEventListener('load', () => {
+  setTimeout(startMic, 150);
+});
+
+})();
+</script>
+</body>
+</html>
