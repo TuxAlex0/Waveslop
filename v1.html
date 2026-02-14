@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Premium Waveform Visualizer</title>
+  <style>
+    :root {
+      --bg: #030712;
+      --card-bg: rgba(30, 41, 59, 0.5);
+      --accent: #10b981; /* Emerald */
+      --glow-1: #22d3ee; /* Cyan */
+      --glow-2: #818cf8; /* Indigo */
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at center, #111827 0%, #030712 100%);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .container {
+      width: 90%;
+      max-width: 800px;
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 500;
+      letter-spacing: -0.025em;
+      margin-bottom: 2rem;
+      color: var(--muted);
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 240px;
+      margin-bottom: 2rem;
+    }
+
+    canvas#wave {
+      width: 100%;
+      height: 100%;
+      /* This CSS filter creates a much cleaner glow than JS shadowBlur */
+      filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.3));
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 12px 24px;
+      border-radius: 100px;
+      width: fit-content;
+      margin: 0 auto;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.5); opacity: 0.5; }
+    }
+
+    .timer {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* Permission Overlay */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+
+    .card {
+      background: #1e293b;
+      padding: 32px;
+      border-radius: 20px;
+      max-width: 400px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .btn {
+      background: var(--text);
+      color: var(--bg);
+      border: none;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      margin-top: 20px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .btn:hover { transform: translateY(-2px); }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1 id="title">Pronto per registrare...</h1>
+    
+    <div class="canvas-container">
+      <canvas id="wave"></canvas>
+    </div>
+
+    <div class="status-bar">
+      <div class="dot"></div>
+      <div class="timer" id="timer">00:00</div>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay" style="display:none;">
+    <div class="card">
+      <p id="overlay-msg">Accesso al microfono richiesto per visualizzare l'onda sonora.</p>
+      <button id="retry" class="btn">Attiva Microfono</button>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const canvas = document.getElementById('wave');
+      const ctx = canvas.getContext('2d', { alpha: true });
+      const timerEl = document.getElementById('timer');
+      const titleEl = document.getElementById('title');
+      const overlay = document.getElementById('overlay');
+      const retryBtn = document.getElementById('retry');
+
+      let audioCtx, analyser, source, rafId, samplerId;
+      let volumes = [];
+      let displayVolumes = [];
+      let startTime = null;
+      const maxSamples = 80; // Reduced for a "cleaner" bar look
+      const sampleInterval = 30;
+
+      function resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      function draw() {
+        const w = canvas.width / (window.devicePixelRatio || 1);
+        const h = canvas.height / (window.devicePixelRatio || 1);
+        ctx.clearRect(0, 0, w, h);
+
+        const centerY = h / 2;
+        const barGap = 6; 
+        const barWidth = (w / maxSamples) - barGap;
+        const radius = barWidth / 2;
+
+        // Visual smoothing logic
+        for(let i = 0; i < volumes.length; i++) {
+          if(displayVolumes[i] == null) displayVolumes[i] = 0;
+          // Faster spring-back for a snappy feel
+          displayVolumes[i] += (volumes[i] - displayVolumes[i]) * 0.15;
+        }
+
+        displayVolumes.forEach((vol, i) => {
+          // Add a tiny bit of random "life" noise
+          const noise = Math.random() * 2;
+          const minHeight = 4;
+          const magnitude = (vol * (h * 0.8)) + minHeight + noise;
+          
+          const x = i * (barWidth + barGap);
+          const y = centerY - magnitude / 2;
+
+          // Gradient creation
+          const grad = ctx.createLinearGradient(0, y, 0, y + magnitude);
+          grad.addColorStop(0, '#22d3ee'); // Cyan
+          grad.addColorStop(0.5, '#818cf8'); // Indigo
+          grad.addColorStop(1, '#22d3ee');
+
+          ctx.fillStyle = grad;
+          
+          // Draw rounded bars (Capsule style)
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(x, y, barWidth, magnitude, [radius]);
+          } else {
+            ctx.rect(x, y, barWidth, magnitude); // Fallback
+          }
+          ctx.fill();
+        });
+
+        if(startTime) {
+          const diff = Date.now() - startTime;
+          const s = Math.floor(diff/1000);
+          timerEl.textContent = `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+        }
+
+        rafId = requestAnimationFrame(draw);
+      }
+
+      async function init() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          overlay.style.display = 'none';
+          
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 512; 
+          source = audioCtx.createMediaStreamSource(stream);
+          source.connect(analyser);
+
+          const dataArray = new Float32Array(analyser.frequencyBinCount);
+          volumes = new Array(maxSamples).fill(0);
+          displayVolumes = new Array(maxSamples).fill(0);
+          
+          startTime = Date.now();
+          titleEl.textContent = "Registrazione in corso...";
+
+          samplerId = setInterval(() => {
+            analyser.getFloatTimeDomainData(dataArray);
+            let sum = 0;
+            for(let i=0; i<dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+            let rms = Math.sqrt(sum / dataArray.length);
+            // Boost sensitivity
+            let level = Math.pow(rms, 0.7) * 1.5; 
+            volumes.push(level);
+            if(volumes.length > maxSamples) volumes.shift();
+          }, sampleInterval);
+
+          draw();
+        } catch (e) {
+          overlay.style.display = 'flex';
+        }
+      }
+
+      retryBtn.addEventListener('click', init);
+      window.addEventListener('load', () => setTimeout(init, 500));
+    })();
+  </script>
+</body>
+</html>
